@@ -1,0 +1,150 @@
+#!/bin/bash
+
+# This script will extract every dex file out of your jar files and then
+# baksmali them into a folder.
+
+# Created by: Ivan Maldonado
+
+VERSION="1.0"
+
+if [[ $1 == "--version" || $1 == "-v" ]]
+then
+	echo "BakSmaliMe" $VERSION
+	echo "Copyright (C) 2010 Free Software Foundation, Inc."
+	echo "License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>."
+	echo "This is free software: you are free to change and redistribute it."
+	echo "There is NO WARRANTY, to the extent permitted by law."
+	echo "Written by Ivan Maldonado."	
+	exit
+fi
+
+if [[ $1 == "--help" || $1 == "-h" ]]
+then
+	echo "Usage: ./BakSmaliMe [OPTION]"
+	echo "This script will extract every dex file out of jar and apk files"
+	echo "given to it and then baksmali the classes.dex within them."
+	echo "Just run it without arguments."
+	echo ""
+	echo "Options:"
+	echo "-h, --help	Display this help and exit."
+	echo "-v, --version	Output version information and exit."
+	exit
+fi
+
+# Verify Java JDK is installed.
+# If not found, install.
+
+REQUIRED_VERSION=sun-java6-jdk
+VERSION=`dpkg --get-selections | awk '/\Winstall/{print $1}' | grep sun-java6-jdk`
+
+if [ $(($VERSION)) -eq $(($REQUIRED_VERSION)) ]
+then
+	echo "Required version of Java detected."
+else	
+	sudo add-apt-repository ppa:ferramroberto/java
+	sudo apt-get update
+	sudo apt-get -y install sun-java6-jdk
+
+	# Set Java version to use by default.
+	sudo update-java-alternatives -s java-6-sun
+fi
+
+# Create needed folders holding folder if they do not exist.
+if [ ! -d tools ]
+then
+	echo "Error: Cannot find tools folder."
+	echo "Please wait while required files are downloaded."
+	mkdir tools
+	wget -O tools/baksmali.jar http://smali.googlecode.com/files/baksmali-1.2.6.jar
+fi
+
+
+if [ ! -d extracted ]
+then
+	mkdir extracted
+fi
+
+if [ ! -d ready2edit ]
+then
+	mkdir ready2edit
+fi
+
+if [ ! -d temp ]
+then
+	mkdir temp
+fi
+
+if [ ! -d input ]
+then
+	mkdir input
+fi
+
+# Open the folder where the apk/jar files will be.
+# Pause until you are ready to proceed.
+echo "Press Enter to open the input folder."
+echo "Paste your jar and apk files into this folder."
+read empty
+echo "Opening the input folder with nautilus..."
+nautilus ./input
+echo "After the files have been pasted, press enter here again."
+read empty
+
+
+# Check the names of all the files. Grab the names and store them in a temp
+# file.
+cd input
+ls -l | grep ^- | awk '{print $NF}' > ../filelist
+cd ..
+
+# Use the names from the temp file and extract the classes.dex but name the
+# dex file after the jar/apk name.
+while read line; do
+	echo "Extracting from" ${line} "..."
+	unzip input/`echo ${line}` -d temp >/dev/null
+	mv temp/classes.dex extracted/`echo ${line} | sed -e 's,.jar$,,' | sed -e 's,.apk$,,'`.dex >/dev/null
+	if [ $? -ne 0 ]
+	then
+		echo `echo ${line}` "does not have a classes.dex file. Skipping..."
+	fi
+	rm -r temp/*
+done < filelist
+
+
+# Use the names from the temp file to run the command:
+# 'java -jar baksmali.jar -o classout/ classes.dex'
+# Use the names from the temp file for the classout folder and the classes.dex
+# file name.
+while read line; do
+	echo "Extracting from" ${line}"'s classes.dex with BakSmali..."
+	java -jar tools/baksmali.jar -o ready2edit/`echo ${line} | sed -e 's,.jar$,,' | sed -e 's,.apk$,,'`/ extracted/`echo ${line} | sed -e 's,.jar$,,' | sed -e 's,.apk$,,'`.dex >/dev/null
+	if [ $? -ne 0 ]
+	then
+		echo `echo ${line}` "didn't have a classes.dex file. Skipping..."
+	fi
+done < filelist
+
+# Open directory with "ready to edit" files.
+echo "Opening output folder..."
+nautilus ./ready2edit
+
+# Clean up folders.
+rm filelist
+
+echo "Do you want to clean out all temporary folders. (y/N)"
+read choice
+
+if [[ $choice == 'Y' || $choice == 'y' ]]
+then
+	echo "Deleting temporary folders..."
+	rm -r temp input extracted
+fi
+
+echo "Do you want to clean out ready2edit folders. (y/N)"
+echo "This folder contains all the smali files."
+read choice
+if [[ $choice == 'Y' || $choice == 'y' ]]
+then
+	echo "Deleting the ready2edit folder..."
+	rm -r ready2edit
+fi
+

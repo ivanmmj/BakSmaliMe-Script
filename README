@@ -1,0 +1,9 @@
+Make sure that you give the script execute permission with the following:
+
+chmod +x BakSmaliMe
+
+To run script
+
+./BakSmaliMe
+
+This was made for a friend. If you find it useful, use it. If you want to improve upon it, do so and push the code back here so that we can all benefit from it.
